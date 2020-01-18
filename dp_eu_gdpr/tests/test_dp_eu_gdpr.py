@@ -1,5 +1,5 @@
-# Copyright 2017-Today datenpol gmbh (<https://www.datenpol.at/>)
-# License OPL-1 or later (https://www.odoo.com/documentation/user/12.0/legal/licenses/licenses.html#licenses).
+# Copyright 2018-Today datenpol gmbh (<https://www.datenpol.at/>)
+# License OPL-1 or later (https://www.odoo.com/documentation/user/13.0/legal/licenses/licenses.html#licenses).
 
 import base64
 from io import BytesIO
@@ -35,12 +35,12 @@ class TestDpEuGdpr(TransactionCase):
         """
 
         # res.partner
-        self.wizard.object = self.demo_customer
+        self.wizard.object = "%s,%s" % (self.demo_customer._name, str(self.demo_customer.id))
         _, line = self.wizard._prepare_export_data()
         assert line[0] == self.demo_customer.name
 
         # res.users
-        self.wizard.object = self.demo_user
+        self.wizard.object = "%s,%s" % (self.demo_user._name, str(self.demo_user.id))
         _, line = self.wizard._prepare_export_data()
         assert line[0] == self.demo_user.name
 
@@ -50,7 +50,7 @@ class TestDpEuGdpr(TransactionCase):
         Run wizard and export customer data, check if a zip file is created
         """
 
-        self.wizard.object = self.demo_customer
+        self.wizard.object = "%s,%s" % (self.demo_customer._name, str(self.demo_customer.id))
         log = self.env['eu.gdpr_log'].create({})
         attachment_id = self.wizard._export_csv(log)
         attachment = self.env['ir.attachment'].browse(attachment_id)
@@ -78,7 +78,7 @@ class TestDpEuGdpr(TransactionCase):
         }
         partner = ResPartner.create(vals)
 
-        self.wizard.object = partner
+        self.wizard.object = "%s,%s" % (partner._name, str(partner.id))
         self.wizard.process()
 
         domain = [
@@ -93,10 +93,10 @@ class TestDpEuGdpr(TransactionCase):
             'name': 'Dorothea Tiefenthal',
             'login': 'doro@example.com',
         }
-        user = ResUsers.create(vals)
+        user = self.env['res.users'].create(vals)
         partner_id = user.partner_id.id
 
-        self.wizard.object = user
+        self.wizard.object = "%s,%s" % (user._name, str(user.id))
         self.wizard.process()
 
         domain = [
@@ -119,7 +119,7 @@ class TestDpEuGdpr(TransactionCase):
         # res.partner
         assert self.demo_customer.active
 
-        self.wizard.object = self.demo_customer
+        self.wizard.object = "%s,%s" % (self.demo_customer._name, str(self.demo_customer.id))
         self.wizard.process()
 
         assert not self.demo_customer.active
@@ -127,7 +127,7 @@ class TestDpEuGdpr(TransactionCase):
         # res.users
         assert self.demo_user.active
 
-        self.wizard.object = self.demo_user
+        self.wizard.object = "%s,%s" % (self.demo_user._name, str(self.demo_user.id))
         self.wizard.process()
 
         assert not self.demo_user.active

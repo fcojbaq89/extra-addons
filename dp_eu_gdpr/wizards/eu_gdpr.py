@@ -1,40 +1,20 @@
-# Copyright 2018-Today datenpol gmbh (<https://www.datenpol.at/>)
-# License OPL-1 or later (https://www.odoo.com/documentation/user/11.0/legal/licenses/licenses.html#licenses).
+# -*- coding: utf-8 -*-
+# Copyright 2018-Today datenpol gmbh (<http://www.datenpol.at>)
+# License OPL-1 or later (https://www.odoo.com/documentation/user/13.0/legal/licenses/licenses.html#licenses).
 
 import base64
 import csv
-from io import BytesIO, StringIO
 import re
 import zipfile
+from io import BytesIO, StringIO
 
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError
 
 
-class GDPRLog(models.Model):
-    _name = 'eu.gdpr_log'
-    _description = 'GDPR Log'
-    _order = 'create_date DESC'
-
-
-    name = fields.Char('Name', compute='_compute_name')
-    date = fields.Datetime('Creation date', required=True, default=fields.Datetime.now())
-    user_id = fields.Many2one('res.users', 'User', required=True, default=lambda self: self._uid)
-    operation = fields.Char('Operation')
-    object = fields.Char('Object')
-    dataset = fields.Char('Data Set')
-    partner = fields.Char('Partner', help='Person who executed the operation (e. g. Customer)')
-    note = fields.Char('Notes')
-
-
-    def _compute_name(self):
-        self.name = _('EU-GDPR Logentry #%s') % self.id
-
-
-class GDPR(models.TransientModel):
+class EuGdpr(models.TransientModel):
     _name = 'eu.gdpr'
     _description = 'GDPR Wizard'
-
 
     operation = fields.Selection([
         ('access', _('Right to data portability')),
@@ -48,7 +28,6 @@ class GDPR(models.TransientModel):
     info = fields.Text('Info', readonly=True, help='Display the result of operation.')
     help = fields.Char('Helptext', readonly=True)
 
-
     @api.onchange('operation')
     def _onchange_operation(self):
         if self.operation == 'access':
@@ -56,17 +35,17 @@ class GDPR(models.TransientModel):
 
         elif self.operation == 'erasure':
             self.help = _('WARNING: Please note the legal record retention and the attainment of an aim. '
-                'If one of the two cases occurs, the operation must not be performed. Individual-related '
-                'data will be deleted. If that is not possible, due to technical '
-                'difficulties, the data will be set to inactive instead and will be replaced '
-                'by pseudonyms. Also related data sets, that reference this data, will be deleted - '
-                'e.g. partner of user or user of employee. '
-                'Examples for the legal record retention: Accounting, tax and customs law: 7 - 22 years, '
-                'HR: 2 - 30 years')
+                          'If one of the two cases occurs, the operation must not be performed. Individual-related '
+                          'data will be deleted. If that is not possible, due to technical '
+                          'difficulties, the data will be set to inactive instead and will be replaced '
+                          'by pseudonyms. Also related data sets, that reference this data, will be deleted - '
+                          'e.g. partner of user or user of employee. '
+                          'Examples for the legal record retention: Accounting, tax and customs law: 7 - 22 years, '
+                          'HR: 2 - 30 years')
 
         elif self.operation == 'rectification':
             self.help = _('No operation will be executed from here - it has to be done manually. Regardless '
-                'a GDPR log entry will be created.')
+                          'a GDPR log entry will be created.')
 
         elif self.operation == 'restrict':
             self.help = _('Set individual-related data to inactive.')
@@ -74,22 +53,18 @@ class GDPR(models.TransientModel):
         else:
             self.help = ''
 
-
     @api.onchange('object')
     def _onchange_object(self):
         if self.operation == 'erasure' and self.object:
             self._partner_is_company()
 
-
-    @api.model_cr
     def _register_hook(self):
         # Check for installed modules and append them to the Data Set selection
         for rec in self._gdpr_objects():
-            model = self.env.get(rec)
-            if (model is not None) and ((model._name, model._description) not in self._fields['object'].selection):
-                self._fields['object'].selection.append((model._name, model._description))
+            model = self.with_context(lang=self.env.user.lang).env['ir.model'].search([('model', '=', rec)])
+            if model and ((model.model, model.name) not in self._fields['object'].selection):
+                self._fields['object'].selection.append((model.model, model.name))
                 self._check_access_rights(rec)
-
 
     @api.model
     def _check_access_rights(self, model):
@@ -106,10 +81,8 @@ class GDPR(models.TransientModel):
                 'perm_unlink': True,
             })
 
-
     def _gdpr_objects(self):
         return ['crm.lead', 'res.partner', 'res.users', 'hr.employee', 'hr.applicant']
-
 
     def _personal_fields_crm_lead(self):
         return [
@@ -118,7 +91,6 @@ class GDPR(models.TransientModel):
             'contact_name', 'title', 'function', 'mobile', 'website',
         ]
 
-
     def _personal_fields_res_partner(self):
         return [
             'name', 'street', 'street2', 'city', 'zip', 'country_id',
@@ -126,27 +98,22 @@ class GDPR(models.TransientModel):
             'website', 'state_id',
         ]
 
-
     def _overwrite_fields_res_partner_bank(self):
         return ['acc_number']
 
-
     def _personal_fields_res_partner_bank(self):
         return ['acc_number']
-
 
     def _personal_fields_res_users(self):
         return [
             'name', 'login', 'partner_id', 'signature',
         ]
 
-
     def _personal_fields_hr_applicant(self):
         return [
             'name', 'partner_name', 'partner_id', 'type_id', 'email_from',
             'partner_phone', 'partner_mobile', 'salary_expected',
         ]
-
 
     def _personal_fields_hr_employee(self):
         res = [
@@ -170,12 +137,9 @@ class GDPR(models.TransientModel):
 
         return res
 
-
     def _update_wizard(self, message):
         self.write({'object': False, 'info': message})
 
-
-    @api.multi
     def process(self):
         if not self.object:
             raise ValidationError(_('You need to specify a data set.'))
@@ -204,7 +168,7 @@ class GDPR(models.TransientModel):
                 self._update_wizard(_('The object was successfully deleted.'))
             else:
                 self._update_wizard(_('The object or sub-objects could not be deleted. '
-                    'Objects were pseudonymized with the number %s.') % current_seq)
+                                      'Objects were pseudonymized with the number %s.') % current_seq)
 
         elif self.operation == 'rectification':
             self._update_wizard(_('GDPR Log entry created. Data remains unchanged.'))
@@ -217,7 +181,6 @@ class GDPR(models.TransientModel):
             raise ValidationError(_('You need to specify which type of operation you wish to execute.'))
 
         return res
-
 
     def _prepare_log(self):
         operations = dict(self._fields['operation'].selection)
@@ -232,7 +195,6 @@ class GDPR(models.TransientModel):
             'note': self.note,
         }
 
-
     def _reload_wizard_properties(self):
         return {
             'view_type': 'form',
@@ -244,17 +206,14 @@ class GDPR(models.TransientModel):
             'target': 'new',
         }
 
-
     def _check_restrictions(self):
         self._partner_is_admin()
         self._partner_is_company()
         self._check_partner_has_invoice()
 
-
     def _partner_is_admin(self):
         if self.object._name == 'res.users' and self.object.id == 1:
             raise ValidationError(_('The Administrator cannot be deleted!'))
-
 
     def _partner_is_company(self):
         if self.object._name == 'res.partner' and self.object.is_company:
@@ -268,7 +227,6 @@ class GDPR(models.TransientModel):
             ])
             if invoice_ids:
                 raise ValidationError(_('Partner cannot be deleted due to corresponding invoices.'))
-
 
     def _process_delete_special(self, partner_id):
         # Remove sensitive data from crm.lead on deleting Partner
@@ -284,7 +242,6 @@ class GDPR(models.TransientModel):
                 'mobile': False
             }
             leads.write(vals)
-
 
     def _process_restriction(self, obj):
         # Odoo enforces that an user's partner isn't touched. Thus we can't do
@@ -304,7 +261,6 @@ class GDPR(models.TransientModel):
         # Postponed processing of an user's partner
         if partner:
             self._process_restriction(partner)
-
 
     def _process_delete(self, obj, no_pseudomize=True):
         # no_pseudomize is True by default and will only be set to False if an exception occured.
@@ -390,7 +346,6 @@ class GDPR(models.TransientModel):
 
         return no_pseudomize
 
-
     def _is_recursive(self, obj, field):
         # Odoo doesn't allow to touch the partner while the user still exists.
         # That has to be postponed, thus we ignore it here.
@@ -399,11 +354,10 @@ class GDPR(models.TransientModel):
 
         # Check if field is an instance of type 'Many2one'
         model = self.env['ir.model.fields'].search([('model', '=', obj._name), ('name', '=', field)])
-        if model.ttype == 'many2one' and model.relation in ['res.partner', 'res.users', 'res.partner.bank']\
+        if model.ttype == 'many2one' and model.relation in ['res.partner', 'res.users', 'res.partner.bank'] \
                 and getattr(obj, field) and getattr(obj, field).id != False:
             return True
         return False
-
 
     def _process_export_special(self):
         # Searching for additional attachments and returns the result in a decoded format
@@ -412,7 +366,6 @@ class GDPR(models.TransientModel):
                 ('res_model', '=', self.object._name), ('res_id', '=', self.object.id)
             ])
         return False
-
 
     def _prepare_export_data(self):
         fields = getattr(self, '_personal_fields_%s' % self.object._table)()
@@ -424,10 +377,9 @@ class GDPR(models.TransientModel):
             line.append(value or '')
         return fields, line
 
-
     def _export_csv(self, log):
         fields, line = self._prepare_export_data()
-        attachments = self._process_export_special()
+        attachments = self._process_export_special() or []
         csv_filename = self.object._table + '_' + re.sub('[^A-Za-z0-9]+', '_', self.object.name_get()[0][1])
 
         with StringIO() as csv_stream, BytesIO() as zip_stream:
@@ -438,9 +390,8 @@ class GDPR(models.TransientModel):
             with zipfile.ZipFile(zip_stream, 'w') as myzip:
                 myzip.writestr(csv_filename + '.csv', csv_stream.getvalue())
 
-                if attachments:
-                    for attachment in attachments:
-                        myzip.writestr(attachment.name, base64.b64decode(attachment.datas))
+                for attachment in attachments:
+                    myzip.writestr(attachment.name, base64.b64decode(attachment.datas))
                 if 'image' in self.object and self.object.image:
                     myzip.writestr('image', base64.b64decode(self.object.image))
 
@@ -450,7 +401,7 @@ class GDPR(models.TransientModel):
         return self.env['ir.attachment'].sudo().create({
             'type': 'binary',
             'name': zip_filename,
-            'datas_fname': zip_filename,
+            'store_fname': zip_filename,
             'datas': out,
             'res_model': 'eu.gdpr_log',
             'res_id': log.id,
