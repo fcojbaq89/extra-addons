@@ -1,1 +1,0 @@
-from . import eu_gdpr
